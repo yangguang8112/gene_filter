@@ -10,11 +10,10 @@ class SqliteTool():
         self._cur = self._conn.cursor()
 
     def drop_table_if_exists(self, table_name):
-        # 检查表是否存在
         self._cur.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
         result = self._cur.fetchone()
         if result:
-            # 如果表存在，删除它
+
             self._cur.execute(f"DROP TABLE {table_name};")
             self._conn.commit()
             print(f"Table '{table_name}' dropped successfully.")
@@ -22,15 +21,13 @@ class SqliteTool():
             print(f"Table '{table_name}' does not exist.")
 
     def get_table_dimensions(self, table_name):
-        # 获取表的行数
+
         self._cur.execute(f"SELECT COUNT(*) FROM {table_name}")
         num_rows = self._cur.fetchone()[0]  #基因个数
         #self._cur.execute(f"SELECT * FROM {table_name} LIMIT 1")
         #first_row = self._cur.fetchone()
-        #print(first_row)
-        # 获取表的列数
         self._cur.execute(f"PRAGMA table_info({table_name})")
-        num_cols = len(self._cur.fetchall())-1   #cell个数，要减去索引的基因列
+        num_cols = len(self._cur.fetchall())-1   
 
         result = [num_rows, num_cols]
 
@@ -71,26 +68,16 @@ class SqliteTool():
 
 
     def fetch_row_as_list(self, table_name, index_column, index_value):
-        # 连接到数据库
-        # 执行查询
+
         query = f"SELECT * FROM {table_name} WHERE {index_column} = ?"
         self._cur.execute(query, (index_value,))
-
-        # 获取查询结果
         result = self._cur.fetchone()
 
-        # 将结果转换为列表格式
         result_list = list(result) if result else None
 
         return result_list
     def add_column(self, table_name, column_name, column_type):
-        """
-        向指定的表添加新列。
 
-        :param table_name: 表名
-        :param column_name: 新列的名称
-        :param column_type: 新列的数据类型
-        """
         sql = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
         try:
             self._cur.execute(sql)
@@ -264,20 +251,22 @@ class SqliteTool():
         self._conn.commit()
         print(f"Rows with symbols {symbols} have been deleted from {table_name}.")
 
-    def check_value_in_column(self, table_name, column_name, value):
-        query = f"SELECT * FROM {table_name} WHERE {column_name} = ?"
-
-        # 执行查询
-        self._cur.execute(query, (value,))
-
-        # 获取查询结果
-        rows = self._cur.fetchall()
-
-        # 返回结果
-        return rows
-
-    def close_connection(self):
-        self._conn.close()
+    def update_table_pro(self, table1_name, table2_name):
+        try:
+            cur = self._conn.cursor()
+            cur.execute(f"""
+                UPDATE {table1_name} AS t1
+                SET tissue_cell_num = t2.tissue_cell_num,
+                    cell_pct = t2.cell_pct
+                FROM {table2_name} AS t2
+                WHERE t1.tissue_id = t2.tissue_id
+                    AND t1.cell_type_id = t2.cell_type_id
+            """)
+            self._conn.commit()
+            print("数据更新成功！")
+        except sqlite3.Error as e:
+            print(f"发生错误：{e}")
+            self._conn.rollback()
 
 
 if __name__ == '__main__':
