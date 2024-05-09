@@ -15,7 +15,7 @@ def process_raw():
 
 
 process_raw()
-#db.update_table("csv_data", "unique_csv_data")
+db.update_table_pro("csv_data", "unique_csv_data")
 db.filter_and_insert("csv_data", "target_table", "number_cells", 50)
 
 
