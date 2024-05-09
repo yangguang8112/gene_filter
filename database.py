@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS csv_data (
 cursor.execute(create_table_sql)
 
 # 读取CSV文件并插入数据
-with open('small.csv', 'r') as file:
+with open('human-normal-expression-summary-condensed-07-23-23.csv', 'r') as file:
     csv_reader = csv.reader(file, delimiter=',')
     next(csv_reader)  # 跳过标题行
 
@@ -56,6 +56,10 @@ with open('small.csv', 'r') as file:
                        (id_value, tissue_id, cell_type_id, gene_id, number_nonzero_expression_cells, expression_sum,
                         number_cells,
                         symbol, cell_name, tissue_name, expression_sum_QC, expr_pct, active_expr_mean, expr_mean))
+
+
+
+
 # 提交事务
 conn.commit()
 conn.close()
