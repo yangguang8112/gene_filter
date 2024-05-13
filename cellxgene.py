@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from funcp import unique_group
+from func import unique_group
 from sqlite_tool import SqliteTool
 import re
 import time
@@ -67,7 +67,7 @@ def plot_dotplot(db, pdf_file='None'):
 
     min_gene_count = 15
     min_cell_tissue_count = 20
-    fig, ax = plt.subplots(figsize=(max(18 + 0.25 * len(genes_data), 18 + 0.25 * min_gene_count), max(0.25 * len(cell_tissue_data) - 8, 0.25 * min_cell_tissue_count - 8)))
+    fig, ax = plt.subplots(figsize=(max(18 + 0.25 * len(genes_data), 18 + 0.25 * min_gene_count), max(0.45 * len(cell_tissue_data) , 0.45 * min_cell_tissue_count)))
 
     for i, (cell_line, tissue) in enumerate(cell_tissue_data):
         for j, gene in enumerate(genes_data):
