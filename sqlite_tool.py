@@ -267,6 +267,9 @@ class SqliteTool():
         except sqlite3.Error as e:
             print(f"发生错误：{e}")
             self._conn.rollback()
+    def close_connection(self):
+        self._cur.close()  # 先关闭游标
+        self._conn.close()  # 再关闭连接
 
 
 if __name__ == '__main__':
