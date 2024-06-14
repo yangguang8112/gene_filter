@@ -7,12 +7,11 @@ from sqlite_tool import SqliteTool
 import re
 import time
 
-
 def query_pct_from_database(db, cell_name, symbol):
     # 执行查询并获取结果
     query = """
     SELECT expr_pct
-    FROM final
+    FROM new
     WHERE cell_name = ? AND symbol = ?
     """
     db._cur.execute(query, (cell_name, symbol))
@@ -20,13 +19,12 @@ def query_pct_from_database(db, cell_name, symbol):
     if result is None:
         return
     return result[0]
-
 
 def query_active_expr_from_database(db, cell_name, symbol):
     # 执行查询并获取结果
     query = """
     SELECT active_expr_mean
-    FROM final
+    FROM new
     WHERE cell_name = ? AND symbol = ?
     """
     db._cur.execute(query, (cell_name, symbol))
@@ -35,13 +33,12 @@ def query_active_expr_from_database(db, cell_name, symbol):
         return
     return result[0]
 
+def plot_dot(db, pdf_file='None'):
 
-def plot_dotplot(db, pdf_file='None'):
-
-    db._cur.execute("SELECT DISTINCT cell_name, tissue_name FROM final")
+    db._cur.execute("SELECT DISTINCT cell_name, tissue_name FROM new")
     cell_tissue_data = db._cur.fetchall()
 
-    db._cur.execute("SELECT DISTINCT symbol FROM final")
+    db._cur.execute("SELECT DISTINCT symbol FROM new")
     genes_data = db._cur.fetchall()
 
 
@@ -120,7 +117,7 @@ def my_function(db):
     time.sleep(2)
     start_time = time.time()
     tissue_list = ["mast cell"]
-    plot_dotplot(db, pdf_file='None')
+    plot_dot(db, pdf_file='None')
     end_time = time.time()
     run_time = end_time - start_time
     print("函数运行时间：", run_time, "秒")
@@ -128,5 +125,5 @@ def my_function(db):
 
 if __name__ == '__main__':
     db = SqliteTool('example.db')
-    plot_dotplot(db, pdf_file='None')
+    plot_dot(db, pdf_file='None')
     my_function(db)
