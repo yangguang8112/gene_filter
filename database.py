@@ -8,7 +8,7 @@ cursor = conn.cursor()
 # 创建表
 create_table_sql = '''
 CREATE TABLE IF NOT EXISTS csv_data (
-    id INTEGER,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     tissue_id TEXT,
     cell_type_id TEXT,
     gene_id TEXT,
@@ -27,13 +27,13 @@ CREATE TABLE IF NOT EXISTS csv_data (
 cursor.execute(create_table_sql)
 
 # 读取CSV文件并插入数据
-with open('small.csv', 'r') as file:
+with open('human-normal-expression-summary-condensed-07-23-23.csv', 'r') as file:
     csv_reader = csv.reader(file, delimiter=',')
     next(csv_reader)  # 跳过标题行
 
     for row in csv_reader:
         # 根据列标题来解析CSV数据
-        id_value = row[0].strip()
+        #id_value = row[0].strip()
         tissue_id = row[1].strip() or 'blank'
         cell_type_id = row[2].strip() or 'blank'
         gene_id = row[3].strip() or 'blank'
@@ -49,13 +49,17 @@ with open('small.csv', 'r') as file:
         expr_mean = float(row[13].strip().replace(',', '.')) if row[13].strip() else 0.0
 
         # 插入数据到表中，包括id列
-        cursor.execute('''INSERT INTO csv_data (id, tissue_id, cell_type_id, gene_id, number_nonzero_expression_cells, 
+        cursor.execute('''INSERT INTO csv_data (tissue_id, cell_type_id, gene_id, number_nonzero_expression_cells, 
                                      expression_sum, number_cells, symbol, cell_name, tissue_name, 
                                      expression_sum_QC, expr_pct, active_expr_mean, expr_mean)
-                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                       (id_value, tissue_id, cell_type_id, gene_id, number_nonzero_expression_cells, expression_sum,
+                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                       (tissue_id, cell_type_id, gene_id, number_nonzero_expression_cells, expression_sum,
                         number_cells,
                         symbol, cell_name, tissue_name, expression_sum_QC, expr_pct, active_expr_mean, expr_mean))
+
+
+
+
 # 提交事务
 conn.commit()
 conn.close()

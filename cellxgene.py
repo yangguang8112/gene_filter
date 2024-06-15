@@ -1,95 +1,292 @@
+# import sys
+# import numpy as np
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# from func import unique_group
+# from sqlite_tool import SqliteTool
+# import re
+# import time
+#
+#
+# def query_pct_from_database(db, cell_name, symbol):
+#     # 执行查询并获取结果
+#     query = """
+#     SELECT expr_pct
+#     FROM final
+#     WHERE cell_name = ? AND symbol = ?
+#     """
+#     db._cur.execute(query, (cell_name, symbol))
+#     result = db._cur.fetchone()
+#     if result is None:
+#         return
+#     return result[0]
+#
+#
+# def query_active_expr_from_database(db, cell_name, symbol):
+#     # 执行查询并获取结果
+#     query = """
+#     SELECT active_expr_mean
+#     FROM final
+#     WHERE cell_name = ? AND symbol = ?
+#     """
+#     db._cur.execute(query, (cell_name, symbol))
+#     result = db._cur.fetchone()
+#     if result is None:
+#         return
+#     return result[0]
+#
+#
+# def plot_dotplot(db, pdf_file='None'):
+#
+#     db._cur.execute("SELECT DISTINCT cell_name, tissue_name FROM final")
+#     cell_tissue_data = db._cur.fetchall()
+#
+#     db._cur.execute("SELECT DISTINCT symbol FROM final")
+#     genes_data = db._cur.fetchall()
+#
+#
+#     added_combinations = set()
+#
+#     pct_dict = {}
+#     active_expr_dict = {}
+#
+#
+#     for cell_line, tissue in cell_tissue_data:
+#         if (cell_line, tissue) in added_combinations:
+#             continue
+#
+#         pct_dict[(cell_line, tissue)] = {}
+#         active_expr_dict[(cell_line, tissue)] = {}
+#
+#
+#         for gene in genes_data:
+#             gene = gene[0]
+#             pct = query_pct_from_database(db, cell_line, gene)
+#             active_expr = query_active_expr_from_database(db, cell_line, gene)
+#             pct_dict[(cell_line, tissue)][gene] = pct
+#             active_expr_dict[(cell_line, tissue)][gene] = active_expr
+#
+#         added_combinations.add((cell_line, tissue))
+#
+#     min_gene_count = 15
+#     min_cell_tissue_count = 20
+#     fig, ax = plt.subplots(figsize=(max(18 + 0.25 * len(genes_data), 18 + 0.25 * min_gene_count), max(0.30 * len(cell_tissue_data), 0.30 * min_cell_tissue_count )))
+#
+#     for i, (cell_line, tissue) in enumerate(cell_tissue_data):
+#         for j, gene in enumerate(genes_data):
+#             gene = gene[0]  # 基因名称在元组的第一个位置
+#             size = pct_dict[(cell_line, tissue)][gene]
+#             if size is None:
+#                 continue
+#             color = active_expr_dict[(cell_line, tissue)][gene]
+#             if color is None:
+#                 continue
+#             ax.scatter(j, i, s=size * 200, c=color, cmap='viridis', vmin=0, vmax=4)
+#     # 设置 y 轴标签
+#     y_labels = [f"{cell} # {tissue}" for cell, tissue in cell_tissue_data]
+#     ax.set_yticks(range(len(y_labels)))
+#     #ax.set_yticklabels(y_labels)
+#     ax.set_yticklabels(y_labels, fontsize=5)
+#
+#     # 设置 x 轴标签
+#     gene_names = [gene[0] for gene in genes_data]
+#     ax.set_xticks(range(len(gene_names)))
+#     ax.set_xticklabels(gene_names, rotation=90)
+#
+#     # 设置标题
+#     ax.set_title('scRNA_seq', fontsize=12, fontweight='bold')
+#
+#     # 添加颜色条
+#     norm = plt.Normalize(vmin=0, vmax=4)
+#     sm = plt.cm.ScalarMappable(cmap='viridis', norm=norm)
+#     sm.set_array([])
+#     plt.colorbar(sm, ax=ax, orientation='vertical', fraction=0.04, pad=0.08)
+#
+#     for size in [0.2, 0.5, 0.8, 1]:
+#         ax.scatter([], [], s=size * 200, c='k', label=str(size))
+#     h, l = ax.get_legend_handles_labels()
+#     size_legend = ax.legend(h, l, title="Pct Value", labelspacing=1.5, loc='center left', bbox_to_anchor=(1, 0.6))
+#
+#     plt.ylim(-1, len(cell_tissue_data))
+#     if pdf_file == 'None':
+#         return fig
+#         #plt.show()
+#     else:
+#         plt.savefig(pdf_file, format='png', bbox_inches='tight')
+#
+#
+#
+# if __name__ == '__main__':
+#     db = SqliteTool('example.db')
+#     plot_dotplot(db, pdf_file='None')
+
+
+# import numpy as np
+# import pandas as pd
+# import plotly.express as px
+# from sqlite_tool import SqliteTool
+# import re
+# import time
+#
+# def fetch_data_from_database(db):
+#     # Fetch all data at once
+#     query = """
+#     SELECT cell_name, tissue_name, symbol, expr_pct, active_expr_mean
+#     FROM final
+#     """
+#     db._cur.execute(query)
+#     data = db._cur.fetchall()
+#     # Convert to DataFrame
+#     df = pd.DataFrame(data, columns=['cell_name', 'tissue_name', 'symbol', 'expr_pct', 'active_expr_mean'])
+#     print("Data fetched from database:\n", df.head())  # Debug output
+#     return df
+#
+# def plot_dotplot(df):
+#     df['size'] = df['expr_pct'] * 200  # Adjust size for
+#     num_cells = len(df['cell_name'])
+#     num_genes = len(df['symbol'].unique())
+#     fig = px.scatter(
+#         df,
+#         x='symbol',
+#         y='cell_name',
+#         size='size',
+#         color='active_expr_mean',
+#         hover_data={
+#             'cell_name': True,
+#             'tissue_name': True,
+#             'symbol': True,
+#             'expr_pct': True,
+#             'active_expr_mean': True,
+#             'size': False
+#         },
+#         color_continuous_scale='viridis',
+#         range_color=[0, 4],
+#         title='scRNA_seq'
+#     )
+#
+#     fig.update_layout(
+#         width=500 + 10 * num_genes,  # Adjust width based on the number of genes
+#         height=200 + 10 * num_cells,
+#         yaxis=dict(
+#             tickmode='array',
+#             tickvals=list(range(len(df['cell_name'].unique()))),
+#             ticktext=[f"{cell} # {tissue}" for cell, tissue in zip(df['cell_name'], df['tissue_name'])]
+#         ),
+#         xaxis=dict(
+#             tickmode='array',
+#             tickvals=list(range(len(df['symbol'].unique()))),
+#             ticktext=df['symbol'].unique(),
+#             tickangle=90
+#         )
+#     )
+#
+#     fig.update_traces(marker=dict(line=dict(width=0.5, color='White')))
+#     return fig
+#
+# if __name__ == '__main__':
+#     db = SqliteTool('example.db')
+#     df = fetch_data_from_database(db)
+#     fig = plot_dotplot(df)
+#     fig.show()
+
 import sys
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+from sqlite_tool import SqliteTool
+import re
+import time
 
-####画图函数 dotplot####
-def plot_dotplot(sub_expr_df,sub_actExpr_df,sub_pct_df,pdf_file='None'):
-    ####是否需要聚类绘图？？###################
-    #print('cluster start...')
-    #linked = linkage(sub_expr_df, method='median')
-    #print('cluster end...')
-    ## 获取聚类后的细胞系顺序
-    #order = leaves_list(linked)
-    ## 对DataFrame进行重排序以匹配聚类结果
-    #sub_expr_df = sub_expr_df.iloc[order]
-    #sub_actExpr_df = sub_actExpr_df.iloc[order]
-    #sub_pct_df = sub_pct_df.iloc[order]
-    ######################################
-    # 创建一个绘图网格
-    fig, ax = plt.subplots(figsize=(18+0.25*sub_actExpr_df.shape[1], 0.25*sub_actExpr_df.shape[0]-8))
-    # 绘制dotplot
-    for i, cell_line in enumerate(sub_actExpr_df.index):
-        for j, gene in enumerate(sub_actExpr_df.columns):
-            # 圆圈大小由pct_df决定
-            size = sub_pct_df.loc[cell_line, gene]  # 调整大小比例因子
-            # 圆圈颜色由expr_df决定
-            color = sub_actExpr_df.loc[cell_line, gene]
-            ax.scatter(j, i, s=size*200, c=color, cmap='viridis', vmin=0, vmax=4)
-    # 设置轴标签
-    ylable=sub_actExpr_df.index.get_level_values('cell_name').astype(str) + ' # ' + sub_actExpr_df.index.get_level_values('tissue_name').astype(str)
-    ax.set_xticks(range(len(sub_actExpr_df.columns)))
-    ax.set_xticklabels(sub_actExpr_df.columns, rotation=90)
-    ax.set_yticks(range(len(sub_actExpr_df.index)))
-    ax.set_yticklabels(ylable)
-    ax.set_title('scRNA_seq', fontsize=12, fontweight='bold')
-    # 添加颜色条
-    norm = plt.Normalize(vmin=0, vmax=4)
-    sm = plt.cm.ScalarMappable(cmap='viridis', norm=norm)
-    sm.set_array([])
-    plt.colorbar(sm, ax=ax, orientation='vertical', fraction=0.04, pad=0.04)
+def fetch_data_from_database(db):
+    # Fetch all data at once
+    query = """
+    SELECT cell_name, tissue_name, symbol, expr_pct, active_expr_mean
+    FROM final
+    """
+    db._cur.execute(query)
+    data = db._cur.fetchall()
+    # Convert to DataFrame
+    df = pd.DataFrame(data, columns=['cell_name', 'tissue_name', 'symbol', 'expr_pct', 'active_expr_mean'])
+    df['cell_label'] = df['cell_name'] + ' # ' + df['tissue_name']
+    #df.to_csv("now.csv")
+    return df
 
-    # 添加图例（用条状图表示圆圈大小）
-    for size in [0.2, 0.5, 0.8, 1]:  # 这里的大小值应该根据你的pct_df的实际范围进行调整
-        ax.scatter([], [], s=size*200, c='k', label=str(size))
-    h, l = ax.get_legend_handles_labels()
-    size_legend = ax.legend(h, l, title="Pct Value", labelspacing=1.5, loc='center left', bbox_to_anchor=(1, 0.9))
-    
-    plt.ylim(-1, sub_actExpr_df.shape[0] )
-    if pdf_file=='None':
-        return fig
-        plt.show()
-    else:
-        plt.savefig(pdf_file, bbox_inches='tight')
+def plot_dotplot(df):
+    df['size'] = df['expr_pct'] * 200  # Adjust size for Plotly
+
+    num_cells = len(df['cell_label'].unique())
+    num_genes = len(df['symbol'].unique())
+
+    fig = px.scatter(
+        df,
+        x='symbol',
+        y='cell_label',
+        size='size',
+        color='active_expr_mean',
+        hover_data={
+            'cell_name': True,
+            'tissue_name': True,
+            'symbol': True,
+            'expr_pct': True,
+            'active_expr_mean': True,
+            'size': False  # Hide the size field
+        },
+        color_continuous_scale='viridis',
+        range_color=[0, 4],
+        title='scRNA_seq'
+    )
+
+    # Adjust width and height based on the number of genes and cells
+    fig.update_layout(
+        width=1000 + 100 * num_genes,
+        height=50 + 30 * num_cells,
+        yaxis=dict(
+            tickmode='array',
+            tickvals=list(range(len(df['cell_label'].unique()))),
+            ticktext=df['cell_label'].unique()
+        ),
+        xaxis=dict(
+            tickmode='array',
+            tickvals=list(range(len(df['symbol'].unique()))),
+            ticktext=df['symbol'].unique(),
+            tickangle=90
+        )
+    )
+
+    fig.update_traces(marker=dict(line=dict(width=0.5, color='White')))
+
+    # Add legend for circle sizes
+    sizes = [0.2, 0.5, 0.8, 1.0]  # Example sizes
+    for size in sizes:
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode='markers',
+            marker=dict(
+                size=size * 200,  # Adjust the size here similarly
+                color='lightgray',
+                line=dict(width=0.5, color='White')
+            ),
+            showlegend=True,
+            name=f'Size: {size}'
+        ))
+    fig.update_layout(
+        legend=dict(
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.1,
+            traceorder="normal",
+            font=dict(size=10)
+        )
+    )
+
+    return fig
 
 if __name__ == '__main__':
-    #############数据预处理##################
-    expr1=pd.read_csv('/data/wusijie/database/CELLxGENE/expression_dir/human-normal-expression-summary-condensed-07-23-23.csv',index_col=0)
-    expr1.head()
-    ###计算细胞比例。但是可能没有那么重要，因为太受实验操作的影响了。
-    df_unique = expr1.drop_duplicates(subset=['tissue_id', 'cell_type_id'])
-    # 接下来，我们对每个组织的细胞数目进行汇总
-    tissue_cell_num = df_unique.groupby('tissue_id')['number_cells'].sum().reset_index()
-    tissue_cell_num.rename(columns={'number_cells': 'tissue_cell_num'}, inplace=True)
-    # 将汇总的细胞数目合并回原始dataframe
-    expr1 = expr1.merge(tissue_cell_num, on='tissue_id')
-    # 计算每个细胞系在其组织中的细胞比例
-    expr1['cell_pct'] = expr1['number_cells'] / expr1['tissue_cell_num']
-    ##转化成矩阵
-    expr_df = expr1[expr1.number_cells>50].pivot_table(index=['tissue_name','cell_name'], columns='symbol', values='expr_mean', fill_value=0)
-    actExpr_df = expr1[expr1.number_cells>50].pivot_table(index=['tissue_name','cell_name'], columns='symbol', values='active_expr_mean', fill_value=0)
-    pct_df = expr1[expr1.number_cells>50].pivot_table(index=['tissue_name','cell_name'], columns='symbol', values='expr_pct', fill_value=0)
-    pct_df=pct_df.loc[:,expr_df.columns]
-    ##确保是行、列是对齐的
-    assert expr_df.index.equals(pct_df.index)
-    assert expr_df.columns.equals(pct_df.columns)
-    assert actExpr_df.index.equals(pct_df.index)
-    assert actExpr_df.columns.equals(pct_df.columns)
+    db = SqliteTool('example.db')
+    df = fetch_data_from_database(db)
+    fig = plot_dotplot(df)
+    fig.show()
 
-    ##################进行基因筛选##################
-    # 筛选细胞系
-    target_cell = expr_df.index.get_level_values('cell_name').str.contains('fat|adipocyte', case=False)   
-    d=expr_df
-    target_expr_high = ((d[target_cell] >  1)).sum(axis=0) >= d.shape[0]*0.7    ##在大部分（70%）目标细胞系中表达高（>1）
-    other_expr_low = ((d[~target_cell] <  0.1) ).sum(axis=0) >= (d[~target_cell].shape[0]*0.98)    ##在绝大部分（98%）其他细胞系表达低（<0.1）
-    d_result=pd.DataFrame({'high':target_expr_high,'low':other_expr_low})
-    selected_genes = d.loc[:,target_expr_high & other_expr_low]
-    #################画图##########################
-    genes=selected_genes.columns.values
-    genes=np.append(genes,['ACVR1C','GHR','MMP9','THRA','THRB'])   ##额外添加感兴趣的基因。
-    flag = (expr_df.loc[:,genes] <  0.2).all(axis=1)    ##细胞系太多，排除掉全部低表达的细胞系。
-    sub_expr_df = expr_df.loc[~flag,genes]
-    sub_actExpr_df = actExpr_df.loc[~flag, genes]
-    sub_pct_df = pct_df.loc[~flag, genes]
-    plot_dotplot(sub_expr_df,sub_actExpr_df,sub_pct_df)
+
