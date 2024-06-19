@@ -1,67 +1,153 @@
-import pandas as pd
-import numpy as np
-from cellxgene import plot_dotplot
-import gradio as gr
+from sqlite_tool import SqliteTool
+import re
 
+#db = SqliteTool('example.db')
+def extract_matched_rows_from_database(db, source_table, matched_rows_str, new_table_name, gene_list):
+    # 构建基因列表的条件
+    gene_condition = " OR ".join([f"symbol = '{gene}'" for gene in gene_list])
 
-def process_raw():
-    print("Database init....")
-    # expr1 = pd.read_csv("human-normal-expression-summary-condensed-07-23-23.csv", index_col=0)
-    expr1 = pd.read_csv("small.csv", index_col=0)
-    print("DB Ready")
-    ###计算细胞比例。但是可能没有那么重要，因为太受实验操作的影响了。
-    df_unique = expr1.drop_duplicates(subset=['tissue_id', 'cell_type_id'])
-    # 接下来，我们对每个组织的细胞数目进行汇总
-    tissue_cell_num = df_unique.groupby('tissue_id')['number_cells'].sum().reset_index()
-    tissue_cell_num.rename(columns={'number_cells': 'tissue_cell_num'}, inplace=True)
-    # 将汇总的细胞数目合并回原始dataframe
-    expr1 = expr1.merge(tissue_cell_num, on='tissue_id')
-    # 计算每个细胞系在其组织中的细胞比例
-    expr1['cell_pct'] = expr1['number_cells'] / expr1['tissue_cell_num']
-    ##转化成矩阵
-    expr_df = expr1[expr1.number_cells>50].pivot_table(index=['tissue_name','cell_name'], columns='symbol', values='expr_mean', fill_value=0)
-    actExpr_df = expr1[expr1.number_cells>50].pivot_table(index=['tissue_name','cell_name'], columns='symbol', values='active_expr_mean', fill_value=0)
-    pct_df = expr1[expr1.number_cells>50].pivot_table(index=['tissue_name','cell_name'], columns='symbol', values='expr_pct', fill_value=0)
-    pct_df=pct_df.loc[:,expr_df.columns]
-    ##确保是行、列是对齐的
-    assert expr_df.index.equals(pct_df.index)
-    assert expr_df.columns.equals(pct_df.columns)
-    assert actExpr_df.index.equals(pct_df.index)
-    assert actExpr_df.columns.equals(pct_df.columns)
-    return pct_df, expr_df, actExpr_df
+    # 构建完整的查询语句
+    query = f"""
+    CREATE TABLE IF NOT EXISTS {new_table_name} AS
+    SELECT *
+    FROM {source_table}
+    WHERE (cell_name IN ({matched_rows_str})) AND ({gene_condition});
+    """
+    db._cur.execute(query)
+def extract_matched_and_unmatched_rows_by_cell_name(db, source_table, keywords):
+    matched_rows = []
+    unmatched_rows = []
 
+    unique_cell_names = db.get_index_column_values("unique_csv_data", "cell_name")
 
+    for cell_name in unique_cell_names:
+        matched = False
+        for keyword in keywords:
+            pattern = re.compile(r'\b' + re.escape(keyword) + r'\b', re.IGNORECASE)
+            if re.search(pattern, cell_name):
+                matched_rows.append(cell_name)
+                matched = True
+                break
+        if not matched:
+            unmatched_rows.append(cell_name)
+    matched_rows = list(set(matched_rows))
+    matched_rows_str = ', '.join([f"'{row}'" for row in matched_rows])
+    unmatched_rows_str = ', '.join([f"'{row}'" for row in unmatched_rows])
+    #print(matched_rows_str)
+    #print(unmatched_rows_str)
+    return matched_rows_str, unmatched_rows_str
 
-def filter(expr_df, tissue_list, target_offset=1, target_p=0.7, other_offset=0.1, other_p=0.98):
-    ##################进行基因筛选##################
-    # 筛选细胞系
-    target_cell = expr_df.index.get_level_values('cell_name').str.contains("|".join(tissue_list), case=False)  
-    d=expr_df
-    target_expr_high = ((d[target_cell] >  target_offset)).sum(axis=0) >= d[target_cell].shape[0]*target_p    ##在大部分（70%）目标细胞系中表达高（>1）
-    other_expr_low = ((d[~target_cell] <  other_offset) ).sum(axis=0) >= (d[~target_cell].shape[0]*other_p)    ##在绝大部分（98%）其他细胞系表达低（<0.1）
-    d_result=pd.DataFrame({'high':target_expr_high,'low':other_expr_low})
-    selected_genes = d.loc[:,target_expr_high & other_expr_low]
-    return selected_genes
+def unique_group(db, rows_str, table):
+    count_unique_combinations_query = f"""
+    SELECT COUNT(*) AS unique_combinations
+    FROM (
+        SELECT DISTINCT tissue_name, cell_name
+        FROM {table}
+        WHERE cell_name IN ({rows_str})
+    )
+    """
+    db._cur.execute(count_unique_combinations_query)
+    unique_combinations = db._cur.fetchone()[0]
+    return unique_combinations
 
+def filter_genes_by_threshold(db, matched_rows_str, threshold_value, min_count_value):
 
-def plotting(selected_genes, add_gene, expr_df, actExpr_df, pct_df):
-    #################画图##########################
-    # genes=selected_genes.columns.values
-    # add_gene = ['ACVR1C','GHR','MMP9','THRA','THRB']
-    # print(type(selected_genes), type(add_gene))
-    if len(selected_genes) + len(add_gene) == 0:
-        raise gr.Error("没有符合条件的基因！！！！请重新调整参数")
-    genes=np.append(selected_genes, add_gene)   ##额外添加感兴趣的基因。
-    flag = (expr_df.loc[:,genes] <  0.2).all(axis=1)    ##细胞系太多，排除掉全部低表达的细胞系。
-    sub_expr_df = expr_df.loc[~flag,genes]
-    sub_actExpr_df = actExpr_df.loc[~flag, genes]
-    sub_pct_df = pct_df.loc[~flag, genes]
-    return plot_dotplot(sub_expr_df,sub_actExpr_df,sub_pct_df)
+    query = f"""
+    SELECT
+        symbol,
+        AVG(expr_mean) AS expr_mean,
+        AVG(expr_pct) AS expr_pct,
+        AVG(active_expr_mean) AS active_expr_mean,
+        AVG(tissue_cell_num) AS tissue_cell_num,
+        AVG(cell_pct) AS cell_pct,
+        SUM(CASE WHEN expr_mean > ? THEN 1 ELSE 0 END) AS count_above_threshold
+    FROM
+        target_table
+    WHERE
+        cell_name IN ({matched_rows_str})
+    GROUP BY
+        symbol
+    HAVING
+        count_above_threshold >= ?;
+    """
 
+    db._cur.execute(query, (threshold_value, min_count_value))
+    results = db._cur.fetchall()
+    return results
+
+def filter_genes_by_threshold_other(db, unmatched_rows_str, threshold_value, rows, min_count_value):
+
+    query = f"""
+    SELECT
+        symbol,
+        AVG(expr_mean) AS expr_mean,
+        AVG(expr_pct) AS expr_pct,
+        AVG(active_expr_mean) AS active_expr_mean,
+        AVG(tissue_cell_num) AS tissue_cell_num,
+        AVG(cell_pct) AS cell_pct,
+        SUM(CASE WHEN expr_mean > ? THEN 1 ELSE 0 END) AS opp_count_below_threshold
+    FROM
+        target_table
+    WHERE
+        cell_name IN ({unmatched_rows_str})
+    GROUP BY
+        symbol
+    HAVING        
+        ?-opp_count_below_threshold >= ?;
+    """
+    db._cur.execute(query, (threshold_value, rows, min_count_value))
+    other_results = db._cur.fetchall()
+    return other_results
+
+def insert_rows_with_combined_genes(db, source_table, target_table, combined_gene_list):
+    create_table_sql = f"""
+    CREATE TABLE IF NOT EXISTS {target_table} AS
+    SELECT * FROM {source_table}
+    WHERE symbol IN ({','.join(['?' for _ in combined_gene_list])})
+    ;
+    """
+    db._cur.execute(create_table_sql, combined_gene_list)
+    db._conn.commit()
+    print(f"Rows with genes from combined_gene_list have been inserted into table '{target_table}'.")
+
+def filter_groups_above_threshold(db):
+    db._cur.execute('''
+        DELETE FROM final
+        WHERE (tissue_name, cell_name) IN (
+            SELECT tissue_name, cell_name
+            FROM final
+            GROUP BY tissue_name, cell_name
+            HAVING SUM(CASE WHEN expr_mean > 0.2 THEN 1 ELSE 0 END) = 0
+        )
+    ''')
+    db._conn.commit()
 
 if __name__ == '__main__':
-    pct_df, expr_df, actExpr_df = process_raw()
-    selected_genes = filter(expr_df, ["fat", "adipocyte"], )
-    selected_genes = selected_genes.columns.values
-    print(selected_genes)
-    plotting(selected_genes, [], expr_df, actExpr_df, pct_df)
+    db = SqliteTool('example.db')
+    db.drop_table_if_exists("final")
+    tissue_list = ["mast cell"]
+    source_table = "target_table"
+    matched_rows_str, unmathed_rows_str = extract_matched_and_unmatched_rows_by_cell_name(db, source_table, tissue_list)
+    print(matched_rows_str)
+    target_count = unique_group(db, matched_rows_str, source_table)
+    other_count = unique_group(db, unmathed_rows_str, source_table)
+    threshold_gt = 1
+    threshold_lt = 0.1
+    target_p = 0.7
+    other_p = 0.98
+    print(target_count)
+    print(other_count)
+    filtered_genes = filter_genes_by_threshold(db, matched_rows_str, threshold_gt, target_p * target_count)
+    filtered_genes_other = filter_genes_by_threshold_other(db, unmathed_rows_str, threshold_lt, other_count,
+                                                           other_p * other_count)
+    gene_list1 = [gene[0] for gene in filtered_genes]
+    gene_list2 = [gene[0] for gene in filtered_genes_other]
+    intersection_gene_set = set(gene_list1).intersection(gene_list2)
+    selected_gene = [gene for gene in intersection_gene_set if gene != 'blank']
+
+    print(selected_gene)
+    print(len(gene_list1))
+    print(len(gene_list2))
+    print(len(selected_gene))
+    insert_rows_with_combined_genes(db, "target_table", "final", selected_gene)
+    filter_groups_above_threshold(db)
